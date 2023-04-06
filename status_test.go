@@ -33,13 +33,13 @@ edicts  : 781 used of 2048 max
 	require.Equal(t, "pl_upward", s.Map)
 	require.Equal(t, 33, s.PlayerLimit)
 	require.Equal(t, []statusPlayer{
-		{online: 303, ping: 55, loss: 0, address: "10.0.0.1:27005", port: 27005, ip: "10.0.0.1", steamId: 0x1100001061ae717},
-		{online: 293, ping: 120, loss: 0, address: "10.0.0.2:27005", port: 27005, ip: "10.0.0.2", steamId: 0x110000110ae2e34},
-		{online: 274, ping: 93, loss: 0, address: "10.0.0.3:36973", port: 36973, ip: "10.0.0.3", steamId: 0x110000142debf56},
-		{online: 2230, ping: 87, loss: 0, address: "10.0.0.4:27005", port: 27005, ip: "10.0.0.4", steamId: 0x1100001333791bd},
-		{online: 1162, ping: 80, loss: 0, address: "10.0.0.5:27005", port: 27005, ip: "10.0.0.5", steamId: 0x110000109495db1},
-		{online: 5770, ping: 72, loss: 0, address: "10.0.0.6:27005", port: 27005, ip: "10.0.0.6", steamId: 0x1100001078bedec},
-		{online: 10275, ping: 33, loss: 0, address: "10.0.0.7:27005", port: 27005, ip: "10.0.0.7", steamId: 0x1100001041482dc},
+		{online: 303, ping: 55, loss: 0, address: "10.0.0.1:27005", port: 27005, ip: "10.0.0.1", steamID: 0x1100001061ae717},
+		{online: 293, ping: 120, loss: 0, address: "10.0.0.2:27005", port: 27005, ip: "10.0.0.2", steamID: 0x110000110ae2e34},
+		{online: 274, ping: 93, loss: 0, address: "10.0.0.3:36973", port: 36973, ip: "10.0.0.3", steamID: 0x110000142debf56},
+		{online: 2230, ping: 87, loss: 0, address: "10.0.0.4:27005", port: 27005, ip: "10.0.0.4", steamID: 0x1100001333791bd},
+		{online: 1162, ping: 80, loss: 0, address: "10.0.0.5:27005", port: 27005, ip: "10.0.0.5", steamID: 0x110000109495db1},
+		{online: 5770, ping: 72, loss: 0, address: "10.0.0.6:27005", port: 27005, ip: "10.0.0.6", steamID: 0x1100001078bedec},
+		{online: 10275, ping: 33, loss: 0, address: "10.0.0.7:27005", port: 27005, ip: "10.0.0.7", steamID: 0x1100001041482dc},
 	}, s.Players)
 
 }

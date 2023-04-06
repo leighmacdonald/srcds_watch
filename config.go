@@ -8,11 +8,11 @@ import (
 	"os"
 )
 
-type Version struct {
-	Version string
-	Commit  string
-	Date    string
-	BuiltBy string
+type versionInfo struct {
+	version string
+	commit  string
+	date    string
+	builtBy string
 }
 
 func exists(filePath string) bool {
@@ -22,6 +22,7 @@ func exists(filePath string) bool {
 	return true
 }
 
+// Target is the remote server configuration
 type Target struct {
 	Host     string `yaml:"host"`
 	Port     uint16 `yaml:"port"`
@@ -29,7 +30,7 @@ type Target struct {
 	Name     string `yaml:"name"`
 }
 
-func (t Target) Addr() string {
+func (t Target) addr() string {
 	return fmt.Sprintf("%s:%d", t.Host, t.Port)
 }
 

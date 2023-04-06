@@ -26,7 +26,7 @@ type statusPlayer struct {
 	address string
 	port    int
 	ip      string
-	steamId steamid.SID64
+	steamID steamid.SID64
 }
 
 type status struct {
@@ -147,7 +147,7 @@ func (s *statusCollector) Name() string {
 func (s *statusCollector) Describe(_ chan<- *prometheus.Desc) {
 }
 
-func (s *statusCollector) Update(ch chan<- prometheus.Metric, ctx context.Context) error {
+func (s *statusCollector) Update(ctx context.Context, ch chan<- prometheus.Metric) error {
 	for _, server := range s.config.Targets {
 		conn, errConn := cm.get(server)
 		if errConn != nil {
@@ -168,9 +168,9 @@ func (s *statusCollector) Update(ch chan<- prometheus.Metric, ctx context.Contex
 			continue
 		}
 		for _, player := range newStatus.Players {
-			connected := createStatusDesc("connected", prometheus.Labels{"server": server.Name, "steam_id": player.steamId.String()})
-			ping := createStatusDesc("ping", prometheus.Labels{"server": server.Name, "steam_id": player.steamId.String()})
-			loss := createStatusDesc("loss", prometheus.Labels{"server": server.Name, "steam_id": player.steamId.String()})
+			connected := createStatusDesc("connected", prometheus.Labels{"server": server.Name, "steam_id": player.steamID.String()})
+			ping := createStatusDesc("ping", prometheus.Labels{"server": server.Name, "steam_id": player.steamID.String()})
+			loss := createStatusDesc("loss", prometheus.Labels{"server": server.Name, "steam_id": player.steamID.String()})
 			ch <- prometheus.MustNewConstMetric(connected, prometheus.GaugeValue, float64(1))
 			ch <- prometheus.MustNewConstMetric(ping, prometheus.GaugeValue, float64(player.ping))
 			ch <- prometheus.MustNewConstMetric(loss, prometheus.GaugeValue, float64(player.loss))
@@ -232,7 +232,7 @@ func parseStatus(body string) (*status, error) {
 		match = rePlayer.FindStringSubmatch(line)
 		if match != nil {
 			p := statusPlayer{}
-			p.steamId = steamid.SID3ToSID64(steamid.SID3(match[3]))
+			p.steamID = steamid.SID3ToSID64(steamid.SID3(match[3]))
 			duration, errDur := parseConnected(match[4])
 			if errDur != nil {
 				log.Error("Failed to parse time connected", zap.Error(errDur))

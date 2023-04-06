@@ -8,10 +8,10 @@ import (
 
 var (
 	// Build info
-	version string = "master"
-	commit  string = "latest"
-	date    string = "n/a"
-	builtBy string = "src"
+	version = "master"
+	commit  = "latest"
+	date    = "n/a"
+	builtBy = "src"
 
 	log *zap.Logger
 	cm  *connManager
@@ -24,12 +24,12 @@ const (
 
 func main() {
 	ctx := context.Background()
-	versionInfo := Version{Version: version, Commit: commit, Date: date, BuiltBy: builtBy}
+	vi := versionInfo{version: version, commit: commit, date: date, builtBy: builtBy}
 	log = mustCreateLogger()
 	log.Info("Starting srcds_watch",
-		zap.String("version", versionInfo.Version),
-		zap.String("commit", versionInfo.Commit),
-		zap.String("date", versionInfo.Date))
+		zap.String("version", vi.version),
+		zap.String("commit", vi.commit),
+		zap.String("date", vi.date))
 	conf := newConfig()
 	if !exists(defaultConfigPath) {
 		log.Panic("Failed to find config file", zap.String("config_path", defaultConfigPath))

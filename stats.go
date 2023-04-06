@@ -124,7 +124,7 @@ func (s *statsCollector) Name() string {
 func (s *statsCollector) Describe(_ chan<- *prometheus.Desc) {
 }
 
-func (s *statsCollector) Update(ch chan<- prometheus.Metric, ctx context.Context) error {
+func (s *statsCollector) Update(ctx context.Context, ch chan<- prometheus.Metric) error {
 	for _, server := range s.config.Targets {
 		conn, errConn := cm.get(server)
 		if errConn != nil {

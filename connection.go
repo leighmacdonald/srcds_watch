@@ -17,7 +17,7 @@ type connection struct {
 
 func newConnection(target Target) *connection {
 	return &connection{
-		address:  target.Addr(),
+		address:  target.addr(),
 		password: target.Password,
 		rconMu:   &sync.RWMutex{},
 	}

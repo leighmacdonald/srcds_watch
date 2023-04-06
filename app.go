@@ -10,19 +10,16 @@ import (
 )
 
 type collectorI interface {
-	Update(ch chan<- prometheus.Metric, ctx context.Context) error
+	Update(ctx context.Context, ch chan<- prometheus.Metric) error
 	Name() string
 }
 
 type application struct {
-	config    *config
-	collector RootCollector
+	config *config
 }
 
 func newApplication(config *config) *application {
-	return &application{
-		config: config,
-	}
+	return &application{config: config}
 }
 
 func (app *application) start(ctx context.Context) error {
