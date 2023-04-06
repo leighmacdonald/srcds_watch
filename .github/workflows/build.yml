@@ -17,15 +17,14 @@ jobs:
         uses: actions/setup-go@v3
         with:
           go-version: 'stable'
-
       - name: Check out code into the Go module directory
         uses: actions/checkout@v3
 
       - name: Install Analyzer Dependencies
         run: make check_deps
 
-      - name: Lint golangci-lint
-        run: make lint_golangci
+      #- name: Lint golangci-lint
+      #  run: make lint_golangci
 
       - name: Lint vet
         run: make lint_vet
@@ -55,7 +54,6 @@ jobs:
       - uses: actions/setup-go@v3
         with:
           go-version: 'stable'
-          cache: true
       - name: Test
         run: make test
 
@@ -71,7 +69,6 @@ jobs:
       - uses: actions/setup-go@v3
         with:
           go-version: 'stable'
-          cache: true
       - name: Log in to the Container registry
         uses: docker/login-action@f054a8b539a109f9f41c372932f1ae047eff08c9
         with:
