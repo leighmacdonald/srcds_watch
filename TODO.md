@@ -1,2 +1,1 @@
-sourcemod/metamod versions
 gametracker rank
