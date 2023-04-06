@@ -43,7 +43,7 @@ func (c *connection) Close() error {
 func (c *connection) Stats() (*stats, error) {
 	c.rconMu.RLock()
 	defer c.rconMu.RUnlock()
-	body, errExec := c.rcon.Exec("stats")
+	body, errExec := c.rcon.Exec("stats;sv_maxupdaterate;sm version;meta version")
 	if errExec != nil {
 		return nil, errors.Wrap(errExec, "Failed to execute rcon stats command")
 	}
