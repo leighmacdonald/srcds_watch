@@ -36,64 +36,48 @@ type statsCollector struct {
 	connects []*prometheus.Desc
 }
 
-func createStatsDesc(stat string, serverName string) *prometheus.Desc {
+func createStatsDesc(stat string, labels prometheus.Labels) *prometheus.Desc {
 	switch stat {
 	case "cpu":
 		return prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "stats", stat),
 			"The current cpu usage.",
-			nil, prometheus.Labels{
-				"server": serverName,
-			})
+			nil, labels)
 	case "net_in":
 		return prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "stats", stat),
 			"The current inbound network traffic rate (KB/s)",
-			nil, prometheus.Labels{
-				"server": serverName,
-			})
+			nil, labels)
 	case "net_out":
 		return prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "stats", stat),
 			"The current outbound network traffic rate (KB/s)",
-			nil, prometheus.Labels{
-				"server": serverName,
-			})
+			nil, labels)
 	case "uptime":
 		return prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "stats", stat),
 			"The current server uptime in minutes",
-			nil, prometheus.Labels{
-				"server": serverName,
-			})
+			nil, labels)
 	case "maps":
 		return prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "stats", stat),
 			"The total number of maps that have been played",
-			nil, prometheus.Labels{
-				"server": serverName,
-			})
+			nil, labels)
 	case "fps":
 		return prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "stats", stat),
 			"The current server fps (tickrate)",
-			nil, prometheus.Labels{
-				"server": serverName,
-			})
+			nil, labels)
 	case "players":
 		return prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "stats", stat),
-			"The current player count of the server.",
-			nil, prometheus.Labels{
-				"server": serverName,
-			})
+			"The current statusPlayer count of the server.",
+			nil, labels)
 	case "connects":
 		return prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "stats", stat),
 			"The total number of players that have connected to the server.",
-			nil, prometheus.Labels{
-				"server": serverName,
-			})
+			nil, labels)
 	default:
 		log.Panic("Unhandled stat Name", zap.String("stat", stat))
 	}
@@ -112,14 +96,15 @@ func newStatsCollector(config *config) *statsCollector {
 		connects []*prometheus.Desc
 	)
 	for _, server := range config.Targets {
-		cpu = append(cpu, createStatsDesc("cpu", server.Name))
-		netIn = append(cpu, createStatsDesc("net_in", server.Name))
-		netOut = append(cpu, createStatsDesc("net_out", server.Name))
-		uptime = append(cpu, createStatsDesc("uptime", server.Name))
-		maps = append(cpu, createStatsDesc("maps", server.Name))
-		fps = append(cpu, createStatsDesc("fps", server.Name))
-		players = append(cpu, createStatsDesc("players", server.Name))
-		connects = append(cpu, createStatsDesc("connects", server.Name))
+		labels := prometheus.Labels{"server": server.Name}
+		cpu = append(cpu, createStatsDesc("cpu", labels))
+		netIn = append(netIn, createStatsDesc("net_in", labels))
+		netOut = append(netOut, createStatsDesc("net_out", labels))
+		uptime = append(uptime, createStatsDesc("uptime", labels))
+		maps = append(maps, createStatsDesc("maps", labels))
+		fps = append(fps, createStatsDesc("fps", labels))
+		players = append(players, createStatsDesc("players", labels))
+		connects = append(connects, createStatsDesc("connects", labels))
 	}
 	return &statsCollector{
 		config:   config,
@@ -159,14 +144,14 @@ func (s *statsCollector) Update(ch chan<- prometheus.Metric, ctx context.Context
 			log.Error("No stats returned")
 			continue
 		}
-		cpu := createStatsDesc("cpu", server.Name)
-		netIn := createStatsDesc("net_in", server.Name)
-		netOut := createStatsDesc("net_out", server.Name)
-		uptime := createStatsDesc("uptime", server.Name)
-		maps := createStatsDesc("maps", server.Name)
-		fps := createStatsDesc("fps", server.Name)
-		players := createStatsDesc("players", server.Name)
-		connects := createStatsDesc("connects", server.Name)
+		cpu := createStatsDesc("cpu", prometheus.Labels{"server": server.Name})
+		netIn := createStatsDesc("net_in", prometheus.Labels{"server": server.Name})
+		netOut := createStatsDesc("net_out", prometheus.Labels{"server": server.Name})
+		uptime := createStatsDesc("uptime", prometheus.Labels{"server": server.Name})
+		maps := createStatsDesc("maps", prometheus.Labels{"server": server.Name})
+		fps := createStatsDesc("fps", prometheus.Labels{"server": server.Name})
+		players := createStatsDesc("players", prometheus.Labels{"server": server.Name})
+		connects := createStatsDesc("connects", prometheus.Labels{"server": server.Name})
 
 		ch <- prometheus.MustNewConstMetric(cpu, prometheus.GaugeValue, newStats.CPU)
 		ch <- prometheus.MustNewConstMetric(netIn, prometheus.GaugeValue, newStats.NetIn)

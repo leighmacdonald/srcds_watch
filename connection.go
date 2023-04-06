@@ -41,11 +41,23 @@ func (c *connection) Close() error {
 }
 
 func (c *connection) Stats() (*stats, error) {
+	c.rconMu.RLock()
+	defer c.rconMu.RUnlock()
 	body, errExec := c.rcon.Exec("stats")
 	if errExec != nil {
 		return nil, errors.Wrap(errExec, "Failed to execute rcon stats command")
 	}
 	return parseStats(body)
+}
+
+func (c *connection) Status() (*status, error) {
+	c.rconMu.RLock()
+	defer c.rconMu.RUnlock()
+	body, errExec := c.rcon.Exec("status")
+	if errExec != nil {
+		return nil, errors.Wrap(errExec, "Failed to execute rcon status command")
+	}
+	return parseStatus(body)
 }
 
 type connManager struct {

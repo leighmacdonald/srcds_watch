@@ -1,0 +1,12 @@
+listen_host: 0.0.0.0
+listen_port: 8877
+
+targets:
+  - name: instance-1
+    host: host-1.us.host.com
+    port: 27015
+    password: password
+  - name: instance-2
+    host: host-1.us.host.com
+    port: 27025
+    password: password
