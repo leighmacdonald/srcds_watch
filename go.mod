@@ -4,6 +4,7 @@ go 1.20
 
 require (
 	github.com/leighmacdonald/rcon v1.0.10
+	github.com/leighmacdonald/steamid/v2 v2.2.0
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.14.0
 	github.com/stretchr/testify v1.8.2
