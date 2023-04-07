@@ -37,23 +37,13 @@ func (c *connection) Connect(ctx context.Context) error {
 }
 
 func (c *connection) Close() error {
-	return nil
-}
-
-func (c *connection) Stats() (*stats, error) {
-	c.rconMu.RLock()
-	defer c.rconMu.RUnlock()
-	body, errExec := c.rcon.Exec("stats;sv_maxupdaterate;sm version;meta version")
-	if errExec != nil {
-		return nil, errors.Wrap(errExec, "Failed to execute rcon stats command")
-	}
-	return parseStats(body)
+	return c.rcon.Close()
 }
 
 func (c *connection) Status() (*status, error) {
 	c.rconMu.RLock()
 	defer c.rconMu.RUnlock()
-	body, errExec := c.rcon.Exec("status")
+	body, errExec := c.rcon.Exec("status;stats;sv_maxupdaterate;sm version;meta version;sv_visiblemaxplayers")
 	if errExec != nil {
 		return nil, errors.Wrap(errExec, "Failed to execute rcon status command")
 	}

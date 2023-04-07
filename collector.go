@@ -10,14 +10,12 @@ import (
 
 type rootCollector struct {
 	ctx             context.Context
-	statsCollector  collectorI
 	statusCollector collectorI
 }
 
 func newRootCollector(ctx context.Context, config *config) *rootCollector {
 	return &rootCollector{
 		ctx:             ctx,
-		statsCollector:  newStatsCollector(config),
 		statusCollector: newStatusCollector(config),
 	}
 }
@@ -39,7 +37,7 @@ func (n *rootCollector) Collect(outgoingCh chan<- prometheus.Metric) {
 		}
 		wgOut.Done()
 	}()
-	collectors := []collectorI{n.statsCollector, n.statusCollector}
+	collectors := []collectorI{n.statusCollector}
 	wg := sync.WaitGroup{}
 	wg.Add(len(collectors))
 	for _, coll := range collectors {
