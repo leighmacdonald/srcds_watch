@@ -1,0 +1,114 @@
+project_name: srcds_watch
+
+builds:
+  - binary: srcds_watch
+    env: [CGO_ENABLED=0]
+    goos:
+      - linux
+      - windows
+    goarch:
+      - amd64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}} -X main.builtBy=releaser
+
+nfpms:
+  -
+    id: srcds_watch-nfpms
+    package_name: srcds_watch
+    file_name_template: "{{ .ProjectName }}-{{ .Version }}-{{ .Os }}-{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}"
+    homepage: https://github.com/leighmacdonald/srcds_watch
+    maintainer: "Leigh MacDonald <leighmacdonald@users.noreply.github.com>"
+    description: Prometheus exporter for Valves SRCSD (Source Dedicated Server)
+    license: MIT
+    section: golang
+    formats:
+      - deb
+      - rpm
+    umask: 0o022
+    overrides:
+      deb:
+        contents:
+          - src: LICENSE.md
+            dst: /usr/share/doc/srcds_watch/copyright
+          - src: README.md
+            dst: /usr/share/doc/srcds_watch/README.md
+        recommends:
+          - golang-go
+      rpm:
+        contents:
+          - src: LICENSE.md
+            dst: /usr/share/doc/srcds_watch/LICENSE
+            type: license
+          - src: README.md
+            dst: /usr/share/doc/srcds_watch/README.md
+            type: readme
+        recommends:
+          - /usr/bin/go
+    rpm:
+      group: System Environment/Daemons
+
+release:
+  prerelease: auto
+
+archives:
+  - format: tar.gz
+    wrap_in_directory: true
+    format_overrides:
+      - goos: windows
+        format: zip
+    name_template: '{{ .ProjectName }}-{{ .Version }}-{{ .Os }}-{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}'
+    files:
+      - LICENSE
+      - README.md
+
+snapshot:
+  name_template: SNAPSHOT-{{ .Commit }}
+
+checksum:
+  name_template: '{{ .ProjectName }}-{{ .Version }}-checksums.txt'
+
+nightly:
+  name_template: '{{ incpatch .Version }}-devel'
+  tag_name: devel
+  publish_release: true
+  keep_single_release: true
+
+source:
+  enabled: true
+  name_template: '{{ .ProjectName }}-{{ .Version }}-source'
+
+release:
+  github:
+    owner: leighmacdonald
+    name: srcds_watch
+  ids:
+    - linux
+    - windows
+  draft: true
+  replace_existing_draft: true
+
+changelog:
+  use: github-native
+  
+#
+#signs:
+#  - artifacts: checksum
+
+announce:
+  discord:
+    enabled: true
+    message_template: 'gbans {{.Tag}} is out!'
+
+    # Set author of the embed.
+    # Defaults to `GoReleaser`
+    author: 'Leigh MacDonald'
+    # color: ''
+
+    # URL to an image to use as the icon for the embed.
+    # Defaults to `https://goreleaser.com/static/avatar.png`
+    # icon_url: ''
+
+# yaml-language-server: $schema=https://goreleaser.com/static/schema-pro.json
+# vim: set ts=2 sw=2 tw=0 fo=cnqoj
