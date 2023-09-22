@@ -1,4 +1,4 @@
-check: lint_golangci lint_vet lint_imports lint_cyclo lint_golint static
+check: fmt lint_golangci lint_vet lint_imports lint_cyclo lint_golint static
 
 lint_golangci:
 	@golangci-lint run --timeout 3m
@@ -19,7 +19,7 @@ static:
 	@staticcheck -go 1.20 ./...
 
 check_deps:
-	go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.52.2
+	go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.54.2
 	go install golang.org/x/tools/cmd/goimports@latest
 	go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
 	go install golang.org/x/lint/golint@latest
@@ -28,5 +28,13 @@ check_deps:
 docker_build:
 	docker build -t leighmacdonald/srcds_watch:latest .
 
+fmt:
+	gci write . --skip-generated -s standard -s default
+	gofumpt -l -w .
+
 test:
 	go test ./...
+
+update:
+	go get -u ./...
+
