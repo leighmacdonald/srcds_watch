@@ -26,18 +26,6 @@ jobs:
       - name: Lint golangci-lint
         run: make lint_golangci
 
-      - name: Lint vet
-        run: make lint_vet
-
-      - name: Lint imports
-        run: make lint_imports
-
-      - name: Lint cyclo
-        run: make lint_cyclo
-
-      - name: Lint golint
-        run: make lint_golint
-
       - name: Lint static
         run: make static
 
@@ -57,34 +45,3 @@ jobs:
       - name: Test
         run: make test
 
-  publish:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    name: Publish image
-    environment: release
-    needs: test
-    steps:
-      - uses: actions/setup-go@v3
-        with:
-          go-version: 'stable'
-      - name: Log in to the Container registry
-        uses: docker/login-action@v2
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Extract metadata (tags, labels) for Docker
-        id: meta
-        uses: docker/metadata-action@v4
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v4
-        with:
-          #context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
