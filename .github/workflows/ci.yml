@@ -3,6 +3,7 @@ name: ci
 on:
   workflow_run:
     workflows: [linter, tests]
+    types: [requested]
     types:
       - completed
 
