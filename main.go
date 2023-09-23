@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"go.uber.org/zap"
 )
@@ -23,6 +25,9 @@ const (
 func main() {
 	ctx := context.Background()
 	build := versionInfo{version: version, commit: commit, date: date, builtBy: builtBy}
+
+	signalCtx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
 	log := mustCreateLogger()
 	log.Info("Starting srcds_watch",
@@ -52,7 +57,9 @@ func main() {
 	}
 
 	app := newApplication(conf, log)
-	if errApp := app.start(ctx); errApp != nil {
+	if errApp := app.start(signalCtx); errApp != nil {
 		log.Error("Application returned error", zap.Error(errApp))
 	}
+
+	<-signalCtx.Done()
 }

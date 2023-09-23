@@ -50,8 +50,9 @@ func (app *application) start(ctx context.Context) error {
 	go func() {
 		<-ctx.Done()
 
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+		app.log.Info("Shutdown signal received")
 
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 		defer cancel()
 
 		if errShutdown := httpServer.Shutdown(shutdownCtx); errShutdown != nil { //nolint:contextcheck
@@ -59,10 +60,11 @@ func (app *application) start(ctx context.Context) error {
 		}
 	}()
 
-	errServe := httpServer.ListenAndServe()
-	if errServe != nil && !errors.Is(errServe, http.ErrServerClosed) {
+	if errServe := httpServer.ListenAndServe(); errServe != nil && !errors.Is(errServe, http.ErrServerClosed) {
 		return errors.Wrap(errServe, "HTTP listener returned error")
 	}
+
+	app.log.Info("Shutdown successful. Bye.")
 
 	return nil
 }
