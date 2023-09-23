@@ -1,0 +1,20 @@
+name: tests
+
+on: [worksflow_call]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    name: Test
+    environment: release
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: git fetch --force --tags
+      - uses: actions/setup-go@v4
+        with:
+          go-version: 'stable'
+      - name: Test
+        run: make test

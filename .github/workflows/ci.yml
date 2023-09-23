@@ -4,44 +4,8 @@ on:
   push:
   pull_request:
 
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
-
 jobs:
+  tests:
+    uses: ./.github/workflows/tests.yml
   lint:
-    name: Linter
-    runs-on: ubuntu-latest
-    steps:
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: 'stable'
-      - name: Check out code into the Go module directory
-        uses: actions/checkout@v4
-
-      - name: Install Analyzer Dependencies
-        run: make check_deps
-
-      - name: Lint golangci-lint
-        run: make lint_golangci
-
-      - name: Lint static
-        run: make static
-
-  test:
-    runs-on: ubuntu-latest
-    name: Test
-    environment: release
-    needs: lint
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - run: git fetch --force --tags
-      - uses: actions/setup-go@v4
-        with:
-          go-version: 'stable'
-      - name: Test
-        run: make test
-
+    uses: ./.github/workflows/lint.yml
