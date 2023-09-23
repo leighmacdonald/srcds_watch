@@ -9,7 +9,6 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    name: Test
     environment: release
     needs: lint
     steps:
