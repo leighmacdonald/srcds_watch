@@ -67,7 +67,7 @@ jobs:
 
       - name: Execute GoReleaser
         uses: goreleaser/goreleaser-action@v5
-        if: success() && startsWith(github.ref, 'refs/tags/v') &&
+        if: success() && startsWith(github.ref, 'refs/tags/v')
         with:
           distribution: goreleaser
           version: latest
