@@ -1,9 +1,10 @@
-name: Deploy
+name: cd
 
 on:
-  push:
-    tags:  # trigger the deploy job on tag creation
-      - v*
+  workflow_run:
+    workflows: [ci]
+    types:
+      - completed
 
 env:
   REGISTRY: ghcr.io

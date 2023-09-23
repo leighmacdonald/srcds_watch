@@ -1,11 +1,19 @@
-name: build
+name: ci
 
 on:
-  push:
-  pull_request:
+  workflow_run:
+    workflows: [linter, tests]
+    types:
+      - completed
 
 jobs:
-  tests:
-    uses: ./.github/workflows/tests.yml
-  lint:
-    uses: ./.github/workflows/lint.yml
+  on-success:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - run: echo 'Linter passed'
+  on-failure:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+    steps:
+      - run: echo 'Linter failed'

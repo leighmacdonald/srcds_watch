@@ -1,6 +1,10 @@
 name: tests
 
-on: [workflow_call]
+on:
+  workflow_run:
+    workflows: [linter, tests]
+    types:
+      - completed
 
 jobs:
   test:

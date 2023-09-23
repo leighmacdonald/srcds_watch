@@ -1,8 +1,11 @@
-name: lint
-on: [workflow_call]
+name: linter
+
+on:
+  push:
+  pull_request:
+
 jobs:
   lint:
-    name: Linter
     runs-on: ubuntu-latest
     steps:
       - name: Set up Go
