@@ -1,6 +1,6 @@
 name: tests
 
-on: [worksflow_call]
+on: [workflow_call]
 
 jobs:
   test:
