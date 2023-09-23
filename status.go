@@ -3,27 +3,17 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/leighmacdonald/steamid/v2/steamid"
-	"github.com/prometheus/client_golang/prometheus"
-	"go.uber.org/zap"
+	"log"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
-)
 
-var (
-	reMapName        *regexp.Regexp
-	rePlayers        *regexp.Regexp
-	rePlayer         *regexp.Regexp
-	reEdicts         *regexp.Regexp
-	reVisiblePlayers *regexp.Regexp
-	reStats          *regexp.Regexp
-	reRate           *regexp.Regexp
-	reMMVersion      *regexp.Regexp
-	reSMVersion      *regexp.Regexp
-	reSourceTV       *regexp.Regexp
+	"github.com/leighmacdonald/steamid/v3/steamid"
+	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
+	"go.uber.org/zap"
 )
 
 type statusPlayer struct {
@@ -60,6 +50,8 @@ type status struct {
 
 type statusCollector struct {
 	config *config
+	cm     *connManager
+	log    *zap.Logger
 
 	connected           []*prometheus.Desc
 	online              []*prometheus.Desc
@@ -86,7 +78,7 @@ type statusCollector struct {
 	mmVersion           []*prometheus.Desc
 }
 
-func createStatusDesc(stat string, labels prometheus.Labels) *prometheus.Desc {
+func createStatusDesc(namespace string, stat string, labels prometheus.Labels) *prometheus.Desc {
 	switch stat {
 	case "cpu":
 		return prometheus.NewDesc(
@@ -206,11 +198,12 @@ func createStatusDesc(stat string, labels prometheus.Labels) *prometheus.Desc {
 	default:
 		log.Panic("Unhandled stat Name", zap.String("stat", stat))
 	}
+
 	return nil
 }
 
-func newStatusCollector(config *config) *statusCollector {
-	var (
+func newStatusCollector(config *config, connManager *connManager, logger *zap.Logger) *statusCollector {
+	var ( //nolint:prealloc
 		connected           []*prometheus.Desc
 		online              []*prometheus.Desc
 		sourceTV            []*prometheus.Desc
@@ -235,34 +228,39 @@ func newStatusCollector(config *config) *statusCollector {
 		mmVersion           []*prometheus.Desc
 		smVersion           []*prometheus.Desc
 	)
+
 	for _, server := range config.Targets {
 		labels := prometheus.Labels{"server": server.Name}
-		online = append(connected, createStatusDesc("online", labels))
-		connected = append(connected, createStatusDesc("connected", labels))
-		sourceTV = append(sourceTV, createStatusDesc("source_tv", labels))
-		svVisibleMaxPlayers = append(svVisibleMaxPlayers, createStatusDesc("sv_visiblemaxplayers", labels))
-		ping = append(ping, createStatusDesc("ping", labels))
-		loss = append(ping, createStatusDesc("loss", labels))
-		mapName = append(mapName, createStatusDesc("map_name", labels))
-		edicts = append(mapName, createStatusDesc("edicts", labels))
-		playersCount = append(playersCount, createStatusDesc("players_count", labels))
-		playersLimit = append(playersLimit, createStatusDesc("players_limit", labels))
-		playersHuman = append(playersHuman, createStatusDesc("players_human", labels))
-		playersBots = append(playersBots, createStatusDesc("players_bots", labels))
-		cpu = append(cpu, createStatusDesc("cpu", labels))
-		netIn = append(netIn, createStatusDesc("net_in", labels))
-		netOut = append(netOut, createStatusDesc("net_out", labels))
-		uptime = append(uptime, createStatusDesc("uptime", labels))
-		maps = append(maps, createStatusDesc("maps", labels))
-		fps = append(fps, createStatusDesc("fps", labels))
-		players = append(players, createStatusDesc("players", labels))
-		connects = append(connects, createStatusDesc("connects", labels))
-		svMaxUpdateRate = append(svMaxUpdateRate, createStatusDesc("sv_max_update_rate", labels))
-		mmVersion = append(mmVersion, createStatusDesc("metamod_version", labels))
-		smVersion = append(smVersion, createStatusDesc("sourcemod_version", labels))
+
+		online = append(online, createStatusDesc(config.NameSpace, "online", labels))
+		connected = append(connected, createStatusDesc(config.NameSpace, "connected", labels))
+		sourceTV = append(sourceTV, createStatusDesc(config.NameSpace, "source_tv", labels))
+		svVisibleMaxPlayers = append(svVisibleMaxPlayers, createStatusDesc(config.NameSpace, "sv_visiblemaxplayers", labels))
+		ping = append(ping, createStatusDesc(config.NameSpace, "ping", labels))
+		loss = append(loss, createStatusDesc(config.NameSpace, "loss", labels))
+		mapName = append(mapName, createStatusDesc(config.NameSpace, "map_name", labels))
+		edicts = append(edicts, createStatusDesc(config.NameSpace, "edicts", labels))
+		playersCount = append(playersCount, createStatusDesc(config.NameSpace, "players_count", labels))
+		playersLimit = append(playersLimit, createStatusDesc(config.NameSpace, "players_limit", labels))
+		playersHuman = append(playersHuman, createStatusDesc(config.NameSpace, "players_human", labels))
+		playersBots = append(playersBots, createStatusDesc(config.NameSpace, "players_bots", labels))
+		cpu = append(cpu, createStatusDesc(config.NameSpace, "cpu", labels))
+		netIn = append(netIn, createStatusDesc(config.NameSpace, "net_in", labels))
+		netOut = append(netOut, createStatusDesc(config.NameSpace, "net_out", labels))
+		uptime = append(uptime, createStatusDesc(config.NameSpace, "uptime", labels))
+		maps = append(maps, createStatusDesc(config.NameSpace, "maps", labels))
+		fps = append(fps, createStatusDesc(config.NameSpace, "fps", labels))
+		players = append(players, createStatusDesc(config.NameSpace, "players", labels))
+		connects = append(connects, createStatusDesc(config.NameSpace, "connects", labels))
+		svMaxUpdateRate = append(svMaxUpdateRate, createStatusDesc(config.NameSpace, "sv_max_update_rate", labels))
+		mmVersion = append(mmVersion, createStatusDesc(config.NameSpace, "metamod_version", labels))
+		smVersion = append(smVersion, createStatusDesc(config.NameSpace, "sourcemod_version", labels))
 	}
+
 	return &statusCollector{
 		config:              config,
+		cm:                  connManager,
+		log:                 logger.Named("collector"),
 		cpu:                 cpu,
 		netIn:               netIn,
 		netOut:              netOut,
@@ -296,94 +294,115 @@ func (s *statusCollector) Name() string {
 func (s *statusCollector) Describe(_ chan<- *prometheus.Desc) {
 }
 
-func (s *statusCollector) Update(ctx context.Context, ch chan<- prometheus.Metric) error {
-	wg := &sync.WaitGroup{}
+func (s *statusCollector) Update(ctx context.Context, metricCHan chan<- prometheus.Metric) error {
+	waitGroup := &sync.WaitGroup{}
+
 	for _, target := range s.config.Targets {
-		wg.Add(1)
+		waitGroup.Add(1)
+
 		go func(server Target) {
-			defer wg.Done()
-			conn, errConn := cm.get(server)
+			defer waitGroup.Done()
+
+			conn, errConn := s.cm.get(server)
 			if errConn != nil {
-				log.Error("Failed to get connection", zap.Error(errConn))
+				s.log.Error("Failed to get connection", zap.Error(errConn))
+
 				return
 			}
+
 			if connectErr := conn.Connect(ctx); connectErr != nil {
-				log.Error("Failed to connect", zap.Error(errConn))
+				s.log.Error("Failed to connect", zap.Error(errConn))
+
 				return
 			}
+
 			newStatus, errStats := conn.Status()
 			if errStats != nil {
-				log.Error("Failed to get status", zap.Error(errStats))
-				return
-			}
-			if newStatus == nil {
-				log.Error("No status returned")
-				return
-			}
-			for _, player := range newStatus.Players {
-				connected := createStatusDesc("connected", prometheus.Labels{"server": server.Name, "steam_id": player.steamID.String()})
-				ping := createStatusDesc("ping", prometheus.Labels{"server": server.Name, "steam_id": player.steamID.String()})
-				loss := createStatusDesc("loss", prometheus.Labels{"server": server.Name, "steam_id": player.steamID.String()})
+				s.log.Error("Failed to get status", zap.Error(errStats))
 
-				ch <- prometheus.MustNewConstMetric(connected, prometheus.GaugeValue, float64(1))
-				ch <- prometheus.MustNewConstMetric(ping, prometheus.GaugeValue, float64(player.ping))
-				ch <- prometheus.MustNewConstMetric(loss, prometheus.GaugeValue, float64(player.loss))
+				return
 			}
-			online := createStatusDesc("online", prometheus.Labels{"server": server.Name})
-			playersCount := createStatusDesc("players_count", prometheus.Labels{"server": server.Name})
-			playersLimit := createStatusDesc("players_limit", prometheus.Labels{"server": server.Name})
-			playersHuman := createStatusDesc("players_human", prometheus.Labels{"server": server.Name})
-			playersBots := createStatusDesc("players_bots", prometheus.Labels{"server": server.Name})
-			edicts := createStatusDesc("edicts", prometheus.Labels{"server": server.Name})
-			svVisibleMaxPlayers := createStatusDesc("sv_visiblemaxplayers", prometheus.Labels{"server": server.Name})
-			sourceTV := createStatusDesc("source_tv", prometheus.Labels{"server": server.Name})
-			cpu := createStatusDesc("cpu", prometheus.Labels{"server": server.Name})
-			netIn := createStatusDesc("net_in", prometheus.Labels{"server": server.Name})
-			netOut := createStatusDesc("net_out", prometheus.Labels{"server": server.Name})
-			uptime := createStatusDesc("uptime", prometheus.Labels{"server": server.Name})
-			maps := createStatusDesc("maps", prometheus.Labels{"server": server.Name})
-			fps := createStatusDesc("fps", prometheus.Labels{"server": server.Name})
-			players := createStatusDesc("players", prometheus.Labels{"server": server.Name})
-			connects := createStatusDesc("connects", prometheus.Labels{"server": server.Name})
-			svMaxUpdateRate := createStatusDesc("sv_max_update_rate", prometheus.Labels{"server": server.Name})
-			mmVersion := createStatusDesc("metamod_version", prometheus.Labels{"server": server.Name,
-				"metamod_version": newStatus.MMVersion})
-			smVersion := createStatusDesc("sourcemod_version",
+
+			if newStatus == nil {
+				s.log.Error("No status returned")
+
+				return
+			}
+
+			for _, player := range newStatus.Players {
+				connected := createStatusDesc(s.config.NameSpace, "connected", prometheus.Labels{"server": server.Name, "steam_id": player.steamID.String()})
+				ping := createStatusDesc(s.config.NameSpace, "ping", prometheus.Labels{"server": server.Name, "steam_id": player.steamID.String()})
+				loss := createStatusDesc(s.config.NameSpace, "loss", prometheus.Labels{"server": server.Name, "steam_id": player.steamID.String()})
+
+				metricCHan <- prometheus.MustNewConstMetric(connected, prometheus.GaugeValue, float64(1))
+				metricCHan <- prometheus.MustNewConstMetric(ping, prometheus.GaugeValue, float64(player.ping))
+				metricCHan <- prometheus.MustNewConstMetric(loss, prometheus.GaugeValue, float64(player.loss))
+			}
+
+			online := createStatusDesc(s.config.NameSpace, "online", prometheus.Labels{"server": server.Name})
+			playersCount := createStatusDesc(s.config.NameSpace, "players_count", prometheus.Labels{"server": server.Name})
+			playersLimit := createStatusDesc(s.config.NameSpace, "players_limit", prometheus.Labels{"server": server.Name})
+			playersHuman := createStatusDesc(s.config.NameSpace, "players_human", prometheus.Labels{"server": server.Name})
+			playersBots := createStatusDesc(s.config.NameSpace, "players_bots", prometheus.Labels{"server": server.Name})
+			edicts := createStatusDesc(s.config.NameSpace, "edicts", prometheus.Labels{"server": server.Name})
+			svVisibleMaxPlayers := createStatusDesc(s.config.NameSpace, "sv_visiblemaxplayers", prometheus.Labels{"server": server.Name})
+			sourceTV := createStatusDesc(s.config.NameSpace, "source_tv", prometheus.Labels{"server": server.Name})
+			cpu := createStatusDesc(s.config.NameSpace, "cpu", prometheus.Labels{"server": server.Name})
+			netIn := createStatusDesc(s.config.NameSpace, "net_in", prometheus.Labels{"server": server.Name})
+			netOut := createStatusDesc(s.config.NameSpace, "net_out", prometheus.Labels{"server": server.Name})
+			uptime := createStatusDesc(s.config.NameSpace, "uptime", prometheus.Labels{"server": server.Name})
+			maps := createStatusDesc(s.config.NameSpace, "maps", prometheus.Labels{"server": server.Name})
+			fps := createStatusDesc(s.config.NameSpace, "fps", prometheus.Labels{"server": server.Name})
+			players := createStatusDesc(s.config.NameSpace, "players", prometheus.Labels{"server": server.Name})
+			connects := createStatusDesc(s.config.NameSpace, "connects", prometheus.Labels{"server": server.Name})
+			svMaxUpdateRate := createStatusDesc(s.config.NameSpace, "sv_max_update_rate", prometheus.Labels{"server": server.Name})
+			mmVersion := createStatusDesc(s.config.NameSpace, "metamod_version", prometheus.Labels{
+				"server":          server.Name,
+				"metamod_version": newStatus.MMVersion,
+			})
+			smVersion := createStatusDesc(s.config.NameSpace, "sourcemod_version",
 				prometheus.Labels{"server": server.Name, "sourcemod_version": newStatus.SMVersion})
 
-			ch <- prometheus.MustNewConstMetric(online, prometheus.GaugeValue, 1)
-			ch <- prometheus.MustNewConstMetric(playersCount, prometheus.GaugeValue, float64(len(newStatus.Players)))
-			ch <- prometheus.MustNewConstMetric(playersLimit, prometheus.GaugeValue, float64(newStatus.PlayerLimit))
-			ch <- prometheus.MustNewConstMetric(playersHuman, prometheus.GaugeValue, float64(newStatus.PlayersHumans))
-			ch <- prometheus.MustNewConstMetric(playersBots, prometheus.GaugeValue, float64(newStatus.PlayersBots))
-			ch <- prometheus.MustNewConstMetric(edicts, prometheus.GaugeValue, float64(newStatus.Edicts))
-			ch <- prometheus.MustNewConstMetric(svVisibleMaxPlayers, prometheus.GaugeValue, float64(newStatus.SvVisibleMaxPlayers))
+			metricCHan <- prometheus.MustNewConstMetric(online, prometheus.GaugeValue, 1)
+			metricCHan <- prometheus.MustNewConstMetric(playersCount, prometheus.GaugeValue, float64(len(newStatus.Players)))
+			metricCHan <- prometheus.MustNewConstMetric(playersLimit, prometheus.GaugeValue, float64(newStatus.PlayerLimit))
+			metricCHan <- prometheus.MustNewConstMetric(playersHuman, prometheus.GaugeValue, float64(newStatus.PlayersHumans))
+			metricCHan <- prometheus.MustNewConstMetric(playersBots, prometheus.GaugeValue, float64(newStatus.PlayersBots))
+			metricCHan <- prometheus.MustNewConstMetric(edicts, prometheus.GaugeValue, float64(newStatus.Edicts))
+			metricCHan <- prometheus.MustNewConstMetric(svVisibleMaxPlayers, prometheus.GaugeValue, float64(newStatus.SvVisibleMaxPlayers))
+
 			if newStatus.SourceTV {
-				ch <- prometheus.MustNewConstMetric(sourceTV, prometheus.GaugeValue, 1)
+				metricCHan <- prometheus.MustNewConstMetric(sourceTV, prometheus.GaugeValue, 1)
 			} else {
-				ch <- prometheus.MustNewConstMetric(sourceTV, prometheus.GaugeValue, 0)
+				metricCHan <- prometheus.MustNewConstMetric(sourceTV, prometheus.GaugeValue, 0)
 			}
-			ch <- prometheus.MustNewConstMetric(cpu, prometheus.GaugeValue, newStatus.CPU)
-			ch <- prometheus.MustNewConstMetric(netIn, prometheus.GaugeValue, newStatus.NetIn)
-			ch <- prometheus.MustNewConstMetric(netOut, prometheus.GaugeValue, newStatus.NetOut)
-			ch <- prometheus.MustNewConstMetric(uptime, prometheus.GaugeValue, float64(newStatus.Uptime))
-			ch <- prometheus.MustNewConstMetric(maps, prometheus.GaugeValue, float64(newStatus.Maps))
-			ch <- prometheus.MustNewConstMetric(fps, prometheus.GaugeValue, newStatus.FPS)
-			ch <- prometheus.MustNewConstMetric(players, prometheus.GaugeValue, float64(newStatus.Player))
-			ch <- prometheus.MustNewConstMetric(connects, prometheus.GaugeValue, float64(newStatus.Connects))
-			ch <- prometheus.MustNewConstMetric(svMaxUpdateRate, prometheus.GaugeValue, newStatus.SvMaXUpdateRate)
-			ch <- prometheus.MustNewConstMetric(mmVersion, prometheus.GaugeValue, 1)
-			ch <- prometheus.MustNewConstMetric(smVersion, prometheus.GaugeValue, 1)
+
+			metricCHan <- prometheus.MustNewConstMetric(cpu, prometheus.GaugeValue, newStatus.CPU)
+			metricCHan <- prometheus.MustNewConstMetric(netIn, prometheus.GaugeValue, newStatus.NetIn)
+			metricCHan <- prometheus.MustNewConstMetric(netOut, prometheus.GaugeValue, newStatus.NetOut)
+			metricCHan <- prometheus.MustNewConstMetric(uptime, prometheus.GaugeValue, float64(newStatus.Uptime))
+			metricCHan <- prometheus.MustNewConstMetric(maps, prometheus.GaugeValue, float64(newStatus.Maps))
+			metricCHan <- prometheus.MustNewConstMetric(fps, prometheus.GaugeValue, newStatus.FPS)
+			metricCHan <- prometheus.MustNewConstMetric(players, prometheus.GaugeValue, float64(newStatus.Player))
+			metricCHan <- prometheus.MustNewConstMetric(connects, prometheus.GaugeValue, float64(newStatus.Connects))
+			metricCHan <- prometheus.MustNewConstMetric(svMaxUpdateRate, prometheus.GaugeValue, newStatus.SvMaXUpdateRate)
+			metricCHan <- prometheus.MustNewConstMetric(mmVersion, prometheus.GaugeValue, 1)
+			metricCHan <- prometheus.MustNewConstMetric(smVersion, prometheus.GaugeValue, 1)
 		}(target)
 	}
-	wg.Wait()
+
+	waitGroup.Wait()
+
 	return nil
 }
 
 func parseConnected(d string) (time.Duration, error) {
-	pcs := strings.Split(d, ":")
-	var dur time.Duration
-	var parseErr error
+	var (
+		pcs      = strings.Split(d, ":")
+		dur      time.Duration
+		parseErr error
+	)
+
 	switch len(pcs) {
 	case 3:
 		dur, parseErr = time.ParseDuration(fmt.Sprintf("%sh%sm%ss", pcs[0], pcs[1], pcs[2]))
@@ -394,104 +413,143 @@ func parseConnected(d string) (time.Duration, error) {
 	default:
 		dur = 0
 	}
-	return dur, parseErr
+
+	return dur, errors.Wrap(parseErr, "Failed to parse connected time string")
 }
 
-func parseStatus(body string) (*status, error) {
-	s := status{}
+type statusParser struct {
+	reMapName        *regexp.Regexp
+	rePlayers        *regexp.Regexp
+	rePlayer         *regexp.Regexp
+	reEdicts         *regexp.Regexp
+	reVisiblePlayers *regexp.Regexp
+	reStats          *regexp.Regexp
+	reRate           *regexp.Regexp
+	reMMVersion      *regexp.Regexp
+	reSMVersion      *regexp.Regexp
+	reSourceTV       *regexp.Regexp
+}
+
+func newStatusParser() statusParser {
+	return statusParser{
+		reSourceTV:       regexp.MustCompile(`^sourcetv:\s+(?P<stv>74.91.117.2:27015),`),
+		reMMVersion:      regexp.MustCompile(`^\s+Metamod:Source\sversion\s+(?P<mm_version>.+?)$`),
+		reSMVersion:      regexp.MustCompile(`^\s+SourceMod\sVersion:\s(?P<sm_version>.+?)$`),
+		reRate:           regexp.MustCompile(`^"sv_maxupdaterate" = "(?P<rate>\d+)"$`),
+		reStats:          regexp.MustCompile(`^(?P<cpu>\d{1,3}\.\d{1,2})\s+(?P<net_in>\d{1,3}\.\d{1,2})\s+(?P<net_out>\d{1,3}\.\d{1,2})\s+(?P<uptime>\d+)\s+(?P<maps>\d+)\s+(?P<fps>\d{1,3}\.\d{1,2})\s+(?P<players>\d+)\s+(?P<connects>\d+)(\s+)?$`),
+		reVisiblePlayers: regexp.MustCompile(`^"sv_visiblemaxplayers" = "(?P<sv_visiblemaxplayers>\d+)"`),
+		reMapName:        regexp.MustCompile(`^map\s{5}:\s(?P<map_name>.+?)\sat.+?$`),
+		reEdicts:         regexp.MustCompile(`^edicts\s+:\s+(?P<edicts>\d+)\sused.+?$`),
+		rePlayers:        regexp.MustCompile(`^players\s+:\s+(?P<humans>\d+)\s+humans,\s+(?P<bots>\d+)\s+bots\s+\((?P<max>\d+)\smax\)$`),
+		rePlayer:         regexp.MustCompile(`^#\s{1,6}(?P<id>\d{1,6})\s"(?P<name>.+?)"\s+(?P<sid>\[U:\d:\d{1,10}])\s{1,8}(?P<time>\d{1,3}:\d{2}(:\d{2})?)\s+(?P<ping>\d{1,4})\s{1,8}(?P<loss>\d{1,3})\s(spawning|active)\s+(?P<ip>\d+\.\d+\.\d+\.\d+:\d+)$`),
+	}
+}
+
+func (p *statusParser) parse(body string) (*status, error) {
+	newStatus := status{}
+
 	for _, line := range strings.Split(body, "\n") {
-		match := reMapName.FindStringSubmatch(line)
+		match := p.reMapName.FindStringSubmatch(line)
 		if match != nil {
-			s.Map = match[1]
+			newStatus.Map = match[1]
+
 			continue
 		}
-		match = reEdicts.FindStringSubmatch(line)
+
+		match = p.reEdicts.FindStringSubmatch(line)
 		if match != nil {
-			s.Edicts = toIntDefault(match[1], 0)
+			newStatus.Edicts = toIntDefault(match[1], 0)
+
 			continue
 		}
-		match = rePlayers.FindStringSubmatch(line)
+
+		match = p.rePlayers.FindStringSubmatch(line)
 		if match != nil {
-			s.PlayersHumans = toIntDefault(match[1], 0)
-			s.PlayersBots = toIntDefault(match[2], 0)
-			s.PlayerLimit = toIntDefault(match[3], 32)
+			newStatus.PlayersHumans = toIntDefault(match[1], 0)
+			newStatus.PlayersBots = toIntDefault(match[2], 0)
+			newStatus.PlayerLimit = toIntDefault(match[3], 32)
+
 			continue
 		}
-		match = reVisiblePlayers.FindStringSubmatch(line)
+
+		match = p.reVisiblePlayers.FindStringSubmatch(line)
 		if match != nil {
-			s.SvVisibleMaxPlayers = toIntDefault(match[1], 0)
+			newStatus.SvVisibleMaxPlayers = toIntDefault(match[1], 0)
+
 			continue
 		}
-		match = reStats.FindStringSubmatch(line)
+
+		match = p.reStats.FindStringSubmatch(line)
 		if match != nil {
-			s.CPU = toFloat64Default(match[1], 0.0)
-			s.NetIn = toFloat64Default(match[2], 0.0)
-			s.NetOut = toFloat64Default(match[3], 0.0)
-			s.Uptime = toIntDefault(match[4], 0)
-			s.Maps = toIntDefault(match[5], 0)
-			s.FPS = toFloat64Default(match[6], 0.0)
-			s.Player = toIntDefault(match[7], 0)
-			s.Connects = toIntDefault(match[8], 0)
+			newStatus.CPU = toFloat64Default(match[1], 0.0)
+			newStatus.NetIn = toFloat64Default(match[2], 0.0)
+			newStatus.NetOut = toFloat64Default(match[3], 0.0)
+			newStatus.Uptime = toIntDefault(match[4], 0)
+			newStatus.Maps = toIntDefault(match[5], 0)
+			newStatus.FPS = toFloat64Default(match[6], 0.0)
+			newStatus.Player = toIntDefault(match[7], 0)
+			newStatus.Connects = toIntDefault(match[8], 0)
+
 			continue
 		}
-		match = reMMVersion.FindStringSubmatch(line)
+
+		match = p.reMMVersion.FindStringSubmatch(line)
 		if match != nil {
-			s.MMVersion = match[1]
+			newStatus.MMVersion = match[1]
+
 			continue
 		}
-		match = reSMVersion.FindStringSubmatch(line)
+
+		match = p.reSMVersion.FindStringSubmatch(line)
 		if match != nil {
-			s.SMVersion = match[1]
+			newStatus.SMVersion = match[1]
+
 			continue
 		}
-		match = reRate.FindStringSubmatch(line)
+
+		match = p.reRate.FindStringSubmatch(line)
 		if match != nil {
-			s.SvMaXUpdateRate = toFloat64Default(match[1], 0)
+			newStatus.SvMaXUpdateRate = toFloat64Default(match[1], 0)
+
 			continue
 		}
-		match = reSourceTV.FindStringSubmatch(line)
+
+		match = p.reSourceTV.FindStringSubmatch(line)
 		if match != nil {
-			s.SourceTV = true
+			newStatus.SourceTV = true
+
 			continue
 		}
-		match = rePlayer.FindStringSubmatch(line)
+
+		match = p.rePlayer.FindStringSubmatch(line)
 		if match != nil {
-			p := statusPlayer{}
-			p.steamID = steamid.SID3ToSID64(steamid.SID3(match[3]))
+			newStatusPlayer := statusPlayer{}
+			newStatusPlayer.steamID = steamid.SID3ToSID64(steamid.SID3(match[3]))
+
 			duration, errDur := parseConnected(match[4])
 			if errDur != nil {
-				log.Error("Failed to parse time connected", zap.Error(errDur))
 				duration = 0
 			}
 
-			p.online = int(duration.Seconds())
-			p.ping = toIntDefault(match[6], 0)
-			p.loss = toIntDefault(match[7], 0)
-			p.address = match[9]
-			pcs := strings.Split(p.address, ":")
-			p.ip = pcs[0]
+			newStatusPlayer.online = int(duration.Seconds())
+			newStatusPlayer.ping = toIntDefault(match[6], 0)
+			newStatusPlayer.loss = toIntDefault(match[7], 0)
+			newStatusPlayer.address = match[9]
+			pcs := strings.Split(newStatusPlayer.address, ":")
+			newStatusPlayer.ip = pcs[0]
+
 			port, errPort := strconv.ParseInt(pcs[1], 10, 64)
 			if errPort != nil {
-				log.Error("Failed to parse port", zap.Error(errPort))
 				port = 20000
 			}
-			p.port = int(port)
-			s.Players = append(s.Players, p)
+
+			newStatusPlayer.port = int(port)
+			newStatus.Players = append(newStatus.Players, newStatusPlayer)
 		}
 	}
 
-	return &s, nil
+	return &newStatus, nil
 }
 
 func init() {
-	reSourceTV = regexp.MustCompile(`^sourcetv:\s+(?P<stv>74.91.117.2:27015),`)
-	reMMVersion = regexp.MustCompile(`^\s+Metamod:Source\sversion\s+(?P<mm_version>.+?)$`)
-	reSMVersion = regexp.MustCompile(`^\s+SourceMod\sVersion:\s(?P<sm_version>.+?)$`)
-	reRate = regexp.MustCompile(`^"sv_maxupdaterate" = "(?P<rate>\d+)"$`)
-	reStats = regexp.MustCompile(`^(?P<cpu>\d{1,3}\.\d{1,2})\s+(?P<net_in>\d{1,3}\.\d{1,2})\s+(?P<net_out>\d{1,3}\.\d{1,2})\s+(?P<uptime>\d+)\s+(?P<maps>\d+)\s+(?P<fps>\d{1,3}\.\d{1,2})\s+(?P<players>\d+)\s+(?P<connects>\d+)(\s+)?$`)
-	reVisiblePlayers = regexp.MustCompile(`^"sv_visiblemaxplayers" = "(?P<sv_visiblemaxplayers>\d+)"`)
-	reMapName = regexp.MustCompile(`^map\s{5}:\s(?P<map_name>.+?)\sat.+?$`)
-	reEdicts = regexp.MustCompile(`^edicts\s+:\s+(?P<edicts>\d+)\sused.+?$`)
-	rePlayers = regexp.MustCompile(`^players\s+:\s+(?P<humans>\d+)\s+humans,\s+(?P<bots>\d+)\s+bots\s+\((?P<max>\d+)\smax\)$`)
-	rePlayer = regexp.MustCompile(`^#\s{1,6}(?P<id>\d{1,6})\s"(?P<name>.+?)"\s+(?P<sid>\[U:\d:\d{1,10}])\s{1,8}(?P<time>\d{1,3}:\d{2}(:\d{2})?)\s+(?P<ping>\d{1,4})\s{1,8}(?P<loss>\d{1,3})\s(spawning|active)\s+(?P<ip>\d+\.\d+\.\d+\.\d+:\d+)$`)
 }

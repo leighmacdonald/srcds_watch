@@ -1,1 +1,3 @@
-gametracker rank
+- Gametracker rank
+- Use persistent conn
+- Update in background

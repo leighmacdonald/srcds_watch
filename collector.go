@@ -2,23 +2,29 @@ package main
 
 import (
 	"context"
-	"github.com/prometheus/client_golang/prometheus"
-	"go.uber.org/zap"
 	"sync"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"go.uber.org/zap"
 )
 
 type rootCollector struct {
-	ctx             context.Context
+	// ctx cant get passed via update call as it's not in the defined prom interface so its here until
+	// background updates are enabled
+	ctx             context.Context //nolint:containedctx
 	statusCollector collectorI
+	log             *zap.Logger
 }
 
-func newRootCollector(ctx context.Context, config *config) *rootCollector {
+func newRootCollector(ctx context.Context, config *config, logger *zap.Logger, cm *connManager) *rootCollector {
 	return &rootCollector{
 		ctx:             ctx,
-		statusCollector: newStatusCollector(config),
+		statusCollector: newStatusCollector(config, cm, logger),
+		log:             logger.Named("collector"),
 	}
 }
+
 func (n *rootCollector) Name() string {
 	return "srcds_watch"
 }
@@ -31,28 +37,34 @@ func (n *rootCollector) Collect(outgoingCh chan<- prometheus.Metric) {
 
 	wgOut := sync.WaitGroup{}
 	wgOut.Add(1)
+
 	go func() {
 		for metric := range metricsCh {
 			outgoingCh <- metric
 		}
+
 		wgOut.Done()
 	}()
+
 	collectors := []collectorI{n.statusCollector}
-	wg := sync.WaitGroup{}
-	wg.Add(len(collectors))
+	waitGroup := sync.WaitGroup{}
+
+	waitGroup.Add(len(collectors))
+
 	for _, coll := range collectors {
 		go func(coll collectorI) {
-			defer wg.Done()
+			defer waitGroup.Done()
+
 			c, cancel := context.WithTimeout(n.ctx, time.Second*10)
 			defer cancel()
-			if errUpdate := coll.Update(c, metricsCh); errUpdate != nil {
-				log.Error("Failed to update collector", zap.Error(errUpdate))
-			}
 
+			if errUpdate := coll.Update(c, metricsCh); errUpdate != nil {
+				n.log.Error("Failed to update collector", zap.Error(errUpdate))
+			}
 		}(coll)
 	}
-	wg.Wait()
 
+	waitGroup.Wait()
 	close(metricsCh)
 	wgOut.Wait()
 }
