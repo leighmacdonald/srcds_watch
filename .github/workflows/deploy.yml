@@ -1,11 +1,7 @@
 name: deploy
 
 on:
-  workflow_run:
-    workflows:
-      - tests
-    types:
-      - completed
+  push:
 
 env:
   REGISTRY: ghcr.io
@@ -15,8 +11,42 @@ permissions:
   contents: write
 
 jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: 'stable'
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v4
+
+      - name: Install Analyzer Dependencies
+        run: make check_deps
+
+      - name: Lint golangci-lint
+        run: make lint_golangci
+
+      - name: Lint static
+        run: make static
+
+  tests:
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: git fetch --force --tags
+      - uses: actions/setup-go@v4
+        with:
+          go-version: 'stable'
+      - name: Test
+        run: make test
+
   release:
     runs-on: ubuntu-latest
+    needs: [analyze, tests]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
