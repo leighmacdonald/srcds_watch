@@ -5,7 +5,7 @@ on:
   pull_request:
 
 jobs:
-  lint:
+  linter:
     runs-on: ubuntu-latest
     steps:
       - name: Set up Go

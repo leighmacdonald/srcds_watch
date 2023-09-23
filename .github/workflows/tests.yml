@@ -7,10 +7,9 @@ on:
       - completed
 
 jobs:
-  test:
+  tests:
     runs-on: ubuntu-latest
     environment: release
-    needs: lint
     steps:
       - uses: actions/checkout@v4
         with:
