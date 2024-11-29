@@ -56,11 +56,8 @@ archives:
         format: zip
     name_template: '{{ .ProjectName }}-{{ .Version }}-{{ .Os }}-{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}'
     files:
-      - LICENSE
+      - LICENSE.md
       - README.md
-
-snapshot:
-  name_template: SNAPSHOT-{{ .Commit }}
 
 checksum:
   name_template: '{{ .ProjectName }}-{{ .Version }}-checksums.txt'
