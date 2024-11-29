@@ -4,10 +4,10 @@ lint_golangci:
 	@golangci-lint run --timeout 3m
 
 static:
-	@staticcheck -go 1.20 ./...
+	@staticcheck -go 1.23 ./...
 
 check_deps:
-	go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.54.2
+	go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.62.2
 	go install honnef.co/go/tools/cmd/staticcheck@latest
 
 docker_build:

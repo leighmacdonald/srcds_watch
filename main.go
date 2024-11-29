@@ -2,11 +2,12 @@ package main
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 
-	"go.uber.org/zap"
+	"github.com/dotse/slug"
 )
 
 var (
@@ -22,44 +23,90 @@ const (
 	defaultConfigPath = "srcds_watch.yml"
 )
 
-func main() {
+func mustCreateLogger(levelString string) func() {
+	var level slog.Level
+
+	switch levelString {
+	case "debug":
+		level = slog.LevelDebug
+	case "info":
+		level = slog.LevelInfo
+	case "warn":
+		level = slog.LevelWarn
+	default:
+		level = slog.LevelError
+	}
+
+	closer := func() {}
+
+	opts := slug.HandlerOptions{ //nolint:exhaustruct
+		HandlerOptions: slog.HandlerOptions{ //nolint:exhaustruct
+			Level:     level,
+			AddSource: false,
+		},
+	}
+
+	slog.SetDefault(slog.New(slug.NewHandler(opts, os.Stdout)))
+
+	return closer
+}
+
+func run() int {
 	ctx := context.Background()
 	build := versionInfo{version: version, commit: commit, date: date, builtBy: builtBy}
 
 	signalCtx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	log := mustCreateLogger()
-	log.Info("Starting srcds_watch",
-		zap.String("version", build.version),
-		zap.String("commit", build.commit),
-		zap.String("date", build.date))
-
 	conf := newConfig()
 
 	if !exists(defaultConfigPath) {
-		log.Panic("Failed to find config file", zap.String("config_path", defaultConfigPath))
-	}
+		slog.Error("Failed to find config file", slog.String("config_path", defaultConfigPath))
 
-	log.Info("Loading config file", zap.String("config_path", defaultConfigPath))
+		return 1
+	}
 
 	configFile, cfErr := os.Open(defaultConfigPath)
 	if cfErr != nil {
-		log.Panic("Failed to open config file", zap.Error(cfErr))
+		slog.Error("Failed to open config file", slog.String("error", cfErr.Error()))
+
+		return 1
 	}
 
 	if errRead := conf.read(configFile); errRead != nil {
-		log.Panic("Failed to read config file", zap.Error(errRead))
+		slog.Error("Failed to read config file", slog.String("error", errRead.Error()))
+
+		return 1
 	}
 
 	if errClose := configFile.Close(); errClose != nil {
-		log.Error("Failed to close config file after read", zap.Error(errClose))
+		slog.Error("Failed to close config file after read", slog.String("error", errClose.Error()))
+
+		return 1
 	}
 
-	app := newApplication(conf, log)
+	closeLog := mustCreateLogger(conf.LogLevel)
+	defer closeLog()
+
+	slog.Info("Starting srcds_watch",
+		slog.String("version", build.version),
+		slog.String("commit", build.commit),
+		slog.String("date", build.date))
+
+	slog.Debug("Loading config file", slog.String("config_path", defaultConfigPath))
+
+	app := newApplication(conf)
 	if errApp := app.start(signalCtx); errApp != nil {
-		log.Error("Application returned error", zap.Error(errApp))
+		slog.Error("Application returned error", slog.String("error", errApp.Error()))
+
+		return 1
 	}
 
 	<-signalCtx.Done()
+
+	return 0
+}
+
+func main() {
+	os.Exit(run())
 }

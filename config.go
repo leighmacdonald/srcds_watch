@@ -6,7 +6,6 @@ import (
 	"os"
 
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 )
 
@@ -40,6 +39,7 @@ func (t Target) addr() string {
 type config struct {
 	ListenHost  string   `yaml:"listen_host"`
 	ListenPort  uint16   `yaml:"listen_port"`
+	LogLevel    string   `yaml:"log_level"`
 	MetricsPath string   `yaml:"metrics_path"`
 	NameSpace   string   `yaml:"name_space"`
 	Targets     []Target `yaml:"targets"`
@@ -80,16 +80,9 @@ func (c *config) read(reader io.Reader) error {
 		c.ListenPort = 8767
 	}
 
-	return nil
-}
-
-func mustCreateLogger() *zap.Logger {
-	loggingConfig := zap.NewProductionConfig()
-	// loggingConfig.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
-	logger, errLogger := loggingConfig.Build()
-	if errLogger != nil {
-		panic(fmt.Sprintf("Failed to create logger: %v\n", errLogger.Error()))
+	if c.LogLevel == "" {
+		c.LogLevel = "info"
 	}
 
-	return logger
+	return nil
 }

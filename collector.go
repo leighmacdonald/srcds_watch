@@ -2,26 +2,29 @@ package main
 
 import (
 	"context"
+	"log/slog"
 	"sync"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"go.uber.org/zap"
 )
+
+type CollectorHandler interface {
+	Update(ctx context.Context, ch chan<- prometheus.Metric) error
+	Name() string
+}
 
 type rootCollector struct {
 	// ctx cant get passed via update call as it's not in the defined prom interface so its here until
 	// background updates are enabled
 	ctx             context.Context //nolint:containedctx
-	statusCollector collectorI
-	log             *zap.Logger
+	statusCollector CollectorHandler
 }
 
-func newRootCollector(ctx context.Context, config *config, logger *zap.Logger, cm *connManager) *rootCollector {
+func newRootCollector(ctx context.Context, config *config, cm *connManager) *rootCollector {
 	return &rootCollector{
 		ctx:             ctx,
-		statusCollector: newStatusCollector(config, cm, logger),
-		log:             logger.Named("collector"),
+		statusCollector: newStatusCollector(config, cm),
 	}
 }
 
@@ -46,20 +49,20 @@ func (n *rootCollector) Collect(outgoingCh chan<- prometheus.Metric) {
 		wgOut.Done()
 	}()
 
-	collectors := []collectorI{n.statusCollector}
+	collectors := []CollectorHandler{n.statusCollector}
 	waitGroup := sync.WaitGroup{}
 
 	waitGroup.Add(len(collectors))
 
 	for _, coll := range collectors {
-		go func(coll collectorI) {
+		go func(coll CollectorHandler) {
 			defer waitGroup.Done()
 
 			c, cancel := context.WithTimeout(n.ctx, time.Second*10)
 			defer cancel()
 
 			if errUpdate := coll.Update(c, metricsCh); errUpdate != nil {
-				n.log.Error("Failed to update collector", zap.Error(errUpdate))
+				slog.Error("Failed to update collector", slog.String("error", errUpdate.Error()), slog.String("name", coll.Name()))
 			}
 		}(coll)
 	}
