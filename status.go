@@ -521,7 +521,7 @@ func (p *statusParser) parse(body string) (*status, error) {
 		match = p.rePlayer.FindStringSubmatch(line)
 		if match != nil {
 			newStatusPlayer := statusPlayer{}
-			newStatusPlayer.steamID = steamid.New(steamid.SID3(match[3]))
+			newStatusPlayer.steamID = steamid.New(match[3])
 
 			duration, errDur := parseConnected(match[4])
 			if errDur != nil {
