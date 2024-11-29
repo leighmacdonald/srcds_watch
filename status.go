@@ -3,17 +3,16 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/leighmacdonald/steamid/v3/steamid"
+	"github.com/leighmacdonald/steamid/v4/steamid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"go.uber.org/zap"
 )
 
 type statusPlayer struct {
@@ -23,7 +22,7 @@ type statusPlayer struct {
 	address string
 	port    int
 	ip      string
-	steamID steamid.SID64
+	steamID steamid.SteamID
 }
 
 type status struct {
@@ -51,7 +50,6 @@ type status struct {
 type statusCollector struct {
 	config *config
 	cm     *connManager
-	log    *zap.Logger
 
 	connected           []*prometheus.Desc
 	online              []*prometheus.Desc
@@ -196,13 +194,13 @@ func createStatusDesc(namespace string, stat string, labels prometheus.Labels) *
 			"The current server bot player limit",
 			nil, labels)
 	default:
-		log.Panic("Unhandled stat Name", zap.String("stat", stat))
+		slog.Warn("Unhandled stat Name", slog.String("stat", stat))
 	}
 
 	return nil
 }
 
-func newStatusCollector(config *config, connManager *connManager, logger *zap.Logger) *statusCollector {
+func newStatusCollector(config *config, connManager *connManager) *statusCollector {
 	var ( //nolint:prealloc
 		connected           []*prometheus.Desc
 		online              []*prometheus.Desc
@@ -260,7 +258,6 @@ func newStatusCollector(config *config, connManager *connManager, logger *zap.Lo
 	return &statusCollector{
 		config:              config,
 		cm:                  connManager,
-		log:                 logger.Named("collector"),
 		cpu:                 cpu,
 		netIn:               netIn,
 		netOut:              netOut,
@@ -305,26 +302,26 @@ func (s *statusCollector) Update(ctx context.Context, metricCHan chan<- promethe
 
 			conn, errConn := s.cm.get(server)
 			if errConn != nil {
-				s.log.Error("Failed to get connection", zap.Error(errConn))
+				slog.Error("Failed to get connection", slog.String("server", server.Name), slog.String("error", errConn.Error()))
 
 				return
 			}
 
 			if connectErr := conn.Connect(ctx); connectErr != nil {
-				s.log.Error("Failed to connect", zap.Error(errConn))
+				slog.Error("Failed to connect", slog.String("server", server.Name), slog.String("error", errConn.Error()))
 
 				return
 			}
 
 			newStatus, errStats := conn.Status()
 			if errStats != nil {
-				s.log.Error("Failed to get status", zap.Error(errStats))
+				slog.Error("Failed to get status", slog.String("server", server.Name), slog.String("error", errStats.Error()))
 
 				return
 			}
 
 			if newStatus == nil {
-				s.log.Error("No status returned")
+				slog.Error("No status returned", slog.String("server", server.Name))
 
 				return
 			}
@@ -524,11 +521,11 @@ func (p *statusParser) parse(body string) (*status, error) {
 		match = p.rePlayer.FindStringSubmatch(line)
 		if match != nil {
 			newStatusPlayer := statusPlayer{}
-			newStatusPlayer.steamID = steamid.SID3ToSID64(steamid.SID3(match[3]))
+			newStatusPlayer.steamID = steamid.New(steamid.SID3(match[3]))
 
 			duration, errDur := parseConnected(match[4])
 			if errDur != nil {
-				duration = 0
+				duration = time.Duration(0)
 			}
 
 			newStatusPlayer.online = int(duration.Seconds())

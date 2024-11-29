@@ -2,34 +2,33 @@ package main
 
 import (
 	"context"
+	"errors"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
 
-	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"go.uber.org/zap"
 )
 
-type collectorI interface {
-	Update(ctx context.Context, ch chan<- prometheus.Metric) error
-	Name() string
-}
+var (
+	errPromRegister = errors.New("failed to register prometheus collection")
+	errHTTPListen   = errors.New("HTTP listener returned error")
+)
 
 type application struct {
 	config *config
-	log    *zap.Logger
 	cm     *connManager
 }
 
-func newApplication(config *config, logger *zap.Logger) *application {
-	return &application{config: config, log: logger.Named("srcds_watch"), cm: newConnManager()}
+func newApplication(config *config) *application {
+	return &application{config: config, cm: newConnManager()}
 }
 
 func (app *application) start(ctx context.Context) error {
-	if errRegister := prometheus.Register(newRootCollector(ctx, app.config, app.log, app.cm)); errRegister != nil {
-		app.log.Fatal("Couldn't register collector", zap.Error(errRegister))
+	if errRegister := prometheus.Register(newRootCollector(ctx, app.config, app.cm)); errRegister != nil {
+		return errors.Join(errRegister, errPromRegister)
 	}
 
 	handler := promhttp.HandlerFor(prometheus.DefaultGatherer,
@@ -42,29 +41,29 @@ func (app *application) start(ctx context.Context) error {
 	httpServer := &http.Server{
 		Addr:           app.config.Addr(),
 		Handler:        nil,
-		ReadTimeout:    10 * time.Second,
-		WriteTimeout:   120 * time.Second,
+		ReadTimeout:    20 * time.Second,
+		WriteTimeout:   20 * time.Second,
 		MaxHeaderBytes: 1 << 20,
 	}
 
 	go func() {
 		<-ctx.Done()
 
-		app.log.Info("Shutdown signal received")
+		slog.Info("Shutdown signal received")
 
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 		defer cancel()
 
 		if errShutdown := httpServer.Shutdown(shutdownCtx); errShutdown != nil { //nolint:contextcheck
-			app.log.Error("Error shutting down http service", zap.Error(errShutdown))
+			slog.Error("Error shutting down http service", slog.String("error", errShutdown.Error()))
 		}
 	}()
 
 	if errServe := httpServer.ListenAndServe(); errServe != nil && !errors.Is(errServe, http.ErrServerClosed) {
-		return errors.Wrap(errServe, "HTTP listener returned error")
+		return errors.Join(errServe, errHTTPListen)
 	}
 
-	app.log.Info("Shutdown successful. Bye.")
+	slog.Info("Shutdown successful. Bye.")
 
 	return nil
 }
