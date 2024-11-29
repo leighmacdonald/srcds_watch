@@ -35,8 +35,6 @@ nfpms:
             dst: /usr/share/doc/srcds_watch/copyright
           - src: README.md
             dst: /usr/share/doc/srcds_watch/README.md
-        recommends:
-          - golang-go
       rpm:
         contents:
           - src: LICENSE.md
@@ -67,16 +65,6 @@ snapshot:
 checksum:
   name_template: '{{ .ProjectName }}-{{ .Version }}-checksums.txt'
 
-nightly:
-  name_template: '{{ incpatch .Version }}-devel'
-  tag_name: devel
-  publish_release: true
-  keep_single_release: true
-
-source:
-  enabled: true
-  name_template: '{{ .ProjectName }}-{{ .Version }}-source'
-
 release:
   github:
     owner: leighmacdonald
@@ -89,7 +77,6 @@ release:
 
 changelog:
   use: github-native
-  
 
 #signs:
 #  - artifacts: checksum
