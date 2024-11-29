@@ -2,11 +2,14 @@ package main
 
 import (
 	"context"
+	"net/http"
+	"strconv"
+	"time"
+
+	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
-	"net/http"
-	"strconv"
 )
 
 type collectorI interface {
@@ -16,38 +19,70 @@ type collectorI interface {
 
 type application struct {
 	config *config
+	log    *zap.Logger
+	cm     *connManager
 }
 
-func newApplication(config *config) *application {
-	return &application{config: config}
+func newApplication(config *config, logger *zap.Logger) *application {
+	return &application{config: config, log: logger.Named("srcds_watch"), cm: newConnManager()}
 }
 
 func (app *application) start(ctx context.Context) error {
-	if errRegister := prometheus.Register(newRootCollector(ctx, app.config)); errRegister != nil {
-		log.Fatal("Couldn't register collector", zap.Error(errRegister))
+	if errRegister := prometheus.Register(newRootCollector(ctx, app.config, app.log, app.cm)); errRegister != nil {
+		app.log.Fatal("Couldn't register collector", zap.Error(errRegister))
 	}
+
 	handler := promhttp.HandlerFor(prometheus.DefaultGatherer,
 		promhttp.HandlerOpts{ErrorHandling: promhttp.ContinueOnError})
+
 	http.HandleFunc(app.config.MetricsPath, func(w http.ResponseWriter, r *http.Request) {
 		handler.ServeHTTP(w, r)
 	})
-	return http.ListenAndServe(app.config.Addr(), nil)
+
+	httpServer := &http.Server{
+		Addr:           app.config.Addr(),
+		Handler:        nil,
+		ReadTimeout:    10 * time.Second,
+		WriteTimeout:   120 * time.Second,
+		MaxHeaderBytes: 1 << 20,
+	}
+
+	go func() {
+		<-ctx.Done()
+
+		app.log.Info("Shutdown signal received")
+
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+		defer cancel()
+
+		if errShutdown := httpServer.Shutdown(shutdownCtx); errShutdown != nil { //nolint:contextcheck
+			app.log.Error("Error shutting down http service", zap.Error(errShutdown))
+		}
+	}()
+
+	if errServe := httpServer.ListenAndServe(); errServe != nil && !errors.Is(errServe, http.ErrServerClosed) {
+		return errors.Wrap(errServe, "HTTP listener returned error")
+	}
+
+	app.log.Info("Shutdown successful. Bye.")
+
+	return nil
 }
 
 func toFloat64Default(s string, def float64) float64 {
-	n, errConv := strconv.ParseFloat(s, 64)
+	parsedValue, errConv := strconv.ParseFloat(s, 64)
 	if errConv != nil {
-		log.Error("Failed to parse float64", zap.String("value", s))
 		return def
 	}
-	return n
+
+	return parsedValue
 }
 
 func toIntDefault(s string, def int) int {
-	n, errConv := strconv.ParseInt(s, 10, 32)
+	parsedValue, errConv := strconv.ParseInt(s, 10, 32)
 	if errConv != nil {
-		log.Error("Failed to parse int64", zap.String("value", s))
 		return def
 	}
-	return int(n)
+
+	return int(parsedValue)
 }
