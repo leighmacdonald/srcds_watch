@@ -9,6 +9,7 @@ import (
 
 func TestParseStatus(t *testing.T) {
 	parser := newStatusParser()
+
 	result, parseErr := parser.parse(`hostname: Kittyland Server
 version : 7961495/24 7961495 secure
 udp/ip  : 1.2.33.44:27015
@@ -29,6 +30,7 @@ edicts  : 781 used of 2048 max
 #    720 "viciousbeatmaker"  [U:1:126610924]      1:36:10    72    0 active 10.0.0.6:27005
 #    684 "smeasly"           [U:1:68453084]       2:51:15    33    0 active 10.0.0.7:27005
 `)
+
 	require.NoError(t, parseErr)
 	require.Equal(t, 7, result.PlayersHumans)
 	require.Equal(t, 1, result.PlayersBots)

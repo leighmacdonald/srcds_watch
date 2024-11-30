@@ -21,10 +21,10 @@ type rootCollector struct {
 	statusCollector CollectorHandler
 }
 
-func newRootCollector(ctx context.Context, config *config, cm *connManager) *rootCollector {
+func newRootCollector(ctx context.Context, config *config) *rootCollector {
 	return &rootCollector{
 		ctx:             ctx,
-		statusCollector: newStatusCollector(config, cm),
+		statusCollector: newStatusCollector(config),
 	}
 }
 

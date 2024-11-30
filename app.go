@@ -17,29 +17,20 @@ var (
 	errHTTPListen   = errors.New("HTTP listener returned error")
 )
 
-type application struct {
-	config *config
-	cm     *connManager
-}
-
-func newApplication(config *config) *application {
-	return &application{config: config, cm: newConnManager()}
-}
-
-func (app *application) start(ctx context.Context) error {
-	if errRegister := prometheus.Register(newRootCollector(ctx, app.config, app.cm)); errRegister != nil {
+func start(ctx context.Context, config *config) error {
+	if errRegister := prometheus.Register(newRootCollector(ctx, config)); errRegister != nil {
 		return errors.Join(errRegister, errPromRegister)
 	}
 
 	handler := promhttp.HandlerFor(prometheus.DefaultGatherer,
 		promhttp.HandlerOpts{ErrorHandling: promhttp.ContinueOnError})
 
-	http.HandleFunc(app.config.MetricsPath, func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc(config.MetricsPath, func(w http.ResponseWriter, r *http.Request) {
 		handler.ServeHTTP(w, r)
 	})
 
 	httpServer := &http.Server{
-		Addr:           app.config.Addr(),
+		Addr:           config.Addr(),
 		Handler:        nil,
 		ReadTimeout:    20 * time.Second,
 		WriteTimeout:   20 * time.Second,

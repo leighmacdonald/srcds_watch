@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/leighmacdonald/rcon/rcon"
 	"github.com/leighmacdonald/steamid/v4/steamid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -49,7 +50,6 @@ type status struct {
 
 type statusCollector struct {
 	config *config
-	cm     *connManager
 
 	connected           []*prometheus.Desc
 	online              []*prometheus.Desc
@@ -200,7 +200,7 @@ func createStatusDesc(namespace string, stat string, labels prometheus.Labels) *
 	return nil
 }
 
-func newStatusCollector(config *config, connManager *connManager) *statusCollector {
+func newStatusCollector(config *config) *statusCollector {
 	var ( //nolint:prealloc
 		connected           []*prometheus.Desc
 		online              []*prometheus.Desc
@@ -257,7 +257,6 @@ func newStatusCollector(config *config, connManager *connManager) *statusCollect
 
 	return &statusCollector{
 		config:              config,
-		cm:                  connManager,
 		cpu:                 cpu,
 		netIn:               netIn,
 		netOut:              netOut,
@@ -300,20 +299,20 @@ func (s *statusCollector) Update(ctx context.Context, metricCHan chan<- promethe
 		go func(server Target) {
 			defer waitGroup.Done()
 
-			conn, errConn := s.cm.get(server)
+			conn, errConn := rcon.Dial(ctx, server.addr(), server.Password, time.Second*8)
 			if errConn != nil {
-				slog.Error("Failed to get connection", slog.String("server", server.Name), slog.String("error", errConn.Error()))
-
-				return
-			}
-
-			if connectErr := conn.Connect(ctx); connectErr != nil {
 				slog.Error("Failed to connect", slog.String("server", server.Name), slog.String("error", errConn.Error()))
 
 				return
 			}
 
-			newStatus, errStats := conn.Status()
+			defer func() {
+				if err := conn.Close(); err != nil {
+					slog.Error("Failed to close connection", slog.String("server", server.Name), slog.String("error", errConn.Error()))
+				}
+			}()
+
+			newStatus, errStats := fetchStatus(conn)
 			if errStats != nil {
 				slog.Error("Failed to get status", slog.String("server", server.Name), slog.String("error", errStats.Error()))
 
@@ -325,6 +324,8 @@ func (s *statusCollector) Update(ctx context.Context, metricCHan chan<- promethe
 
 				return
 			}
+
+			slog.Debug("Got status", slog.String("map", newStatus.Map), slog.String("server", server.Name))
 
 			for _, player := range newStatus.Players {
 				connected := createStatusDesc(s.config.NameSpace, "connected", prometheus.Labels{"server": server.Name, "steam_id": player.steamID.String()})
@@ -412,6 +413,18 @@ func parseConnected(d string) (time.Duration, error) {
 	}
 
 	return dur, errors.Wrap(parseErr, "Failed to parse connected time string")
+}
+
+func fetchStatus(conn *rcon.RemoteConsole) (*status, error) {
+	body, errExec := conn.Exec("status;stats;sv_maxupdaterate;sm version;meta version;sv_visiblemaxplayers")
+
+	if errExec != nil {
+		return nil, errors.Wrap(errExec, "Failed to execute rcon status command")
+	}
+
+	parser := newStatusParser()
+
+	return parser.parse(body)
 }
 
 type statusParser struct {

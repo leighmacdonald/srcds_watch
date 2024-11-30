@@ -16,7 +16,6 @@ var (
 	commit  = "latest" //nolint:gochecknoglobals
 	date    = "n/a"    //nolint:gochecknoglobals
 	builtBy = "src"    //nolint:gochecknoglobals
-
 )
 
 const (
@@ -40,8 +39,11 @@ func mustCreateLogger(levelString string) func() {
 	closer := func() {}
 
 	opts := slug.HandlerOptions{ //nolint:exhaustruct
+
 		HandlerOptions: slog.HandlerOptions{ //nolint:exhaustruct
-			Level:     level,
+
+			Level: level,
+
 			AddSource: false,
 		},
 	}
@@ -88,15 +90,14 @@ func run() int {
 	closeLog := mustCreateLogger(conf.LogLevel)
 	defer closeLog()
 
+	slog.Debug("Using config file", slog.String("config_path", defaultConfigPath))
+
 	slog.Info("Starting srcds_watch",
 		slog.String("version", build.version),
 		slog.String("commit", build.commit),
 		slog.String("date", build.date))
 
-	slog.Debug("Loading config file", slog.String("config_path", defaultConfigPath))
-
-	app := newApplication(conf)
-	if errApp := app.start(signalCtx); errApp != nil {
+	if errApp := start(signalCtx, conf); errApp != nil {
 		slog.Error("Application returned error", slog.String("error", errApp.Error()))
 
 		return 1
